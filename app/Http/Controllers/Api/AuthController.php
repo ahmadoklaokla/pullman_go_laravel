@@ -391,4 +391,37 @@ Mail::to($user->email)->send(new OtpMail(
 }
 
 
+
+
+
+
+
+    // دالة تحديث بيانات المستخدم (الاسم والرقم) في الملف الشخصي في حال التغيير
+
+    // دالة تحديث بيانات الملف الشخصي
+    public function updateProfile(Request $request)
+    {
+        // 1. جلب المستخدم الحالي عن طريق التوكن اللي انبعث
+        $user = $request->user();
+
+        // 2. التحقق من صحة البيانات (وإنو الرقم مو مستخدم لحساب ثاني)
+        $request->validate([
+            'name'  => 'required|string|max:255',
+            'phone' => 'required|string|unique:users,phone,' . $user->id, // استثناء رقم المستخدم نفسه من الفحص
+        ]);
+
+        // 3. تحديث البيانات في قاعدة البيانات
+        $user->name = $request->name;
+        $user->phone = $request->phone;
+        $user->save();
+
+        // 4. إرسال الرد لتطبيق الفلاتر
+        return response()->json([
+            'status'  => true,
+            'message' => 'تم تحديث بياناتك بنجاح',
+            'user'    => $user
+        ], 200);
+    }
+
+    
 }
