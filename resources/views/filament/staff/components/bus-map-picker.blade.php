@@ -17,11 +17,23 @@
                 if ($trip && $trip->bus) {
                     $totalSeats = $trip->bus->total_seats; 
                 }
+
+
+
+
                 // جلب أرقام المقاعد المحجوزة
+                
                 $bookedSeats = \App\Models\BookingSeat::whereHas('booking', function($query) use ($tripId) {
-                    $query->where('trip_id', $tripId);
+                    $query->where('trip_id', $tripId)
+
+                          ->where('payment_status', '!=', 'cancelled');  // سيجعل المقاعد الملغية تظهر متاحة فوراً
+
                 })->pluck('seat_number')->toArray();
             }
+
+
+
+
 
             // لقطة ذكية: قراءة مقاعد بقية الركاب في الـ Repeater الحالي من الـ Form لمنع الاختيار المزدوج
             $allData = $this->data ?? [];

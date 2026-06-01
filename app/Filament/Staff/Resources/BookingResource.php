@@ -14,9 +14,9 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\ImageColumn;
 
 use Illuminate\Database\Eloquent\Builder;
-use Filament\Tables\Columns\ImageColumn;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class BookingResource extends Resource
@@ -620,7 +620,6 @@ public static function table(Table $table): Table
             ->columns([
                 
 
-
                 Tables\Columns\TextColumn::make('user.passenger_image') 
                     ->label('الصورة الشخصية')
                     ->alignCenter()
@@ -638,6 +637,15 @@ public static function table(Table $table): Table
                         return '<div style="width: 40px; height: 40px; border-radius: 50%; background-color: #e5e7eb; display: flex; align-items: center; justify-content: center; margin: 0 auto;"><svg style="width:20px; height:20px; color:#9ca3af;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg></div>';
                     }),
 
+
+
+            
+                TextColumn::make('reference_number')
+                    ->label('رقم الحجز')
+                    ->alignCenter()
+                    ->searchable()
+                    ->badge()
+                    ->color('primary'),
 
 
 

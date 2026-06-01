@@ -193,18 +193,32 @@ class TripController extends Controller
 
     // داخل TripController.php
 
-    public function getReservedSeats(Request $request)
+public function getReservedSeats(Request $request)
 {
-    // نحتاج للـ trip_id والتاريخ للتأكد من حجز المقاعد لهذا الموعد بالضبط
-    $reservedSeats = \App\Models\BookingSeat::where('trip_id', $request->trip_id)
-        ->where('travel_date', $request->travel_date)
-        ->pluck('seat_number')
+    // 1. التحقق من البيانات لمنع كراش السيرفر
+    $request->validate([
+        'trip_id'     => 'required|integer',
+        'travel_date' => 'required|string',
+    ]);
+
+    // 2. جلب المقاعد المحجوزة بالربط مع جدول الحجوزات باستثناء الملغية
+    $reservedSeats = \App\Models\BookingSeat::join('bookings', 'booking_seats.booking_id', '=', 'bookings.id')
+        ->where('bookings.trip_id', $request->trip_id)
+        ->where('bookings.travel_date', $request->travel_date)
+
+        // خليلي المقاعد المحجوزة بالحجوزات الملغية خليلي اياها متاحة 
+        ->where('bookings.payment_status', '!=', 'cancelled') 
+        ->pluck('booking_seats.seat_number')
+        ->map(function($seat) {
+            return (string)$seat; // تعديل مهم: حولناها لنص ليتوافق مع كود الفلاتر الجديد
+        })
+
         ->toArray();
 
     return response()->json([
         'status' => true,
         'reserved_seats' => $reservedSeats
-    ]);
+    ], 200);
 }
 
 
