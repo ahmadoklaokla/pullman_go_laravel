@@ -39,7 +39,11 @@ class User extends Authenticatable implements FilamentUser, HasTenants, HasAvata
         'role',        
         'company_id', 
         
+        //هي للوحة التحكم
         "avatar_url",
+
+        // هي للمستخدم ع التطبيق
+        'passenger_image',
     ];
 
     protected $hidden = [

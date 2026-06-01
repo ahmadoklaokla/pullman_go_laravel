@@ -404,11 +404,44 @@ Mail::to($user->email)->send(new OtpMail(
         // 1. جلب المستخدم الحالي عن طريق التوكن اللي انبعث
         $user = $request->user();
 
-        // 2. التحقق من صحة البيانات (وإنو الرقم مو مستخدم لحساب ثاني)
+
+        if ($user->role !== 'passenger') {
+        return response()->json([
+            'status'  => false,
+            'message' => 'عذراً، هذا التعديل متاح فقط لحسابات المسافرين.'
+        ], 403); // كود 403 يعني غير مصرح له
+    }
+
+
+        // 2. التحقق من صحة البيانات (وإنو الرقم مو مستخدم لحساب ثاني وفحص الصورة)
         $request->validate([
             'name'  => 'required|string|max:255',
             'phone' => 'required|string|unique:users,phone,' . $user->id, // استثناء رقم المستخدم نفسه من الفحص
+            'image' => 'nullable|image|mimes:jpeg,png,jpg|max:3072',  //الصورة لا تتجاوز حجم 3 ميغا
         ]);
+
+
+
+        if ($request->hasFile('image')) {
+        // أ) إذا كان للمستخدم صورة قديمة، نحذفها من السيرفر عشان ما نملي المساحة على الفاضي
+        if ($user->passenger_image) {
+            $oldImagePath = public_path($user->passenger_image);
+            if (file_exists($oldImagePath)) {
+                @unlink($oldImagePath);
+            }
+        }
+
+
+        // ب) تسمية الصورة باسم فريد (مثلاً: رقم_المستخدم_مع_الوقت) لعدم تداخل الأسماء
+        $imageName = 'profile_' . $user->id . '_' . time() . '.' . $request->image->extension();
+
+        // ج) نقل الصورة وتخزينها بمجلد public/uploads/profiles داخل اللارافيل
+        $request->image->move(public_path('uploads/profiles'), $imageName);
+
+        // د) حفظ المسار الجديد في حقل الـpassenger_image بقاعدة البيانات
+        $user->passenger_image = 'uploads/profiles/' . $imageName;
+    }
+
 
         // 3. تحديث البيانات في قاعدة البيانات
         $user->name = $request->name;
