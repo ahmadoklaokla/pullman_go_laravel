@@ -210,7 +210,7 @@ public function getReservedSeats(Request $request)
         ->where('bookings.payment_status', '!=', 'cancelled') 
         ->pluck('booking_seats.seat_number')
         ->map(function($seat) {
-            return (string)$seat; // تعديل مهم: حولناها لنص ليتوافق مع كود الفلاتر الجديد
+            return (string)$seat; //: حولناها لنص ليتوافق مع كود الفلاتر الجديد   
         })
 
         ->toArray();

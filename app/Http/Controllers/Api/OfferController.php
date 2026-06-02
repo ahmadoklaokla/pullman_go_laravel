@@ -21,6 +21,8 @@ class OfferController extends Controller
                 'id'           => $offer->id,
                 'route_id'     => $offer->route_id,
                 'offer_price'  => $offer->offer_price, // السعر الجديد بعد العرض
+
+
                 
                 // تم التعديل هنا ليقرأ الحقل الصحيح 'base_price' من جدول الـ routes
                 'old_price'    => $offer->route ? $offer->route->base_price : null, 
@@ -34,11 +36,17 @@ class OfferController extends Controller
                 // الحفاظ على العلاقات كاملة كما هي لتطبيق الـ Flutter
                 'company'      => $offer->company,
                 'route'        => $offer->route,
+
+  
             ];
         });
 
         // 3. إرجاع البيانات المعدلة على شكل JSON
         return response()->json($formattedOffers);
     }
+
+
+
+
     
 }
