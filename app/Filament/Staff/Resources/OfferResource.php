@@ -113,11 +113,12 @@ class OfferResource extends Resource
 
         
 
+
                     // 2. اختيار الرحلة
                 Forms\Components\Select::make('trip_id')
                     ->label('تحديد الرحلة (اختياري)')
                     
-                // --- الإضافة الأولى: السماح باختيار أكثر من رحلة ---
+                    // --- الإضافة الأولى: السماح باختيار أكثر من رحلة ---
                     ->multiple() 
                     
                     // --- التعديل الأساسي: استخدمنا options بدل relationship لأننا بنخزن مصفوفة JSON ---
@@ -129,82 +130,85 @@ class OfferResource extends Resource
                             return [];
                         }
 
-                        // بنجيب الرحلات وبنفلتره)
+                        // بنجيب الرحلات وبنفلترها
                         return \App\Models\Trip::where('company_id', auth()->user()->company_id)
                             ->where('route_id', $routeId)
                             ->get()
                             ->mapWithKeys(function ($record) {
-                                // التعديل الثالث : تنسيق الوقت ليظهر بشكل أنيق
-                                // هي مكتبةCarbon
+                                // تحويل التاريخ لـ Carbon وتحديد اللغة العربية لاسم اليوم
+                                $carbonDate = \Carbon\Carbon::parse($record->trip_date)->locale('ar');
+                                
+                                $dayName = $carbonDate->translatedFormat('l'); // بجيب اسم اليوم (الجمعة، السبت...)
+                                $date = $carbonDate->format('Y-m-d');
                                 $time = \Carbon\Carbon::parse($record->scheduled_time)->format('g:i A');
-                                return [$record->id => "الرحلة رقم {$record->id} | وقت الإنطلاق: {$time}"];
+                                
+                                return [$record->id => "الرحلة رقم {$record->id} | {$dayName} {$date} | وقت الإنطلاق: {$time}"];
                             });
                     })
 
-                        ->preload()
-                        // هي مشان لون الخط
-                        ->native(false)
-                        ->placeholder('اختر الرحلة (أو اتركه فارغاً لتطبيق العرض على كامل رحلات هذا المسار)')
+                    ->preload()
+                    // هي مشان لون الخط
+                    ->native(false)
+                    ->placeholder('اختر الرحلة (أو اتركه فارغاً لتطبيق العرض على كامل رحلات هذا المسار)')
 
-                      // بيراقب التغيير عشان يجيب بيانات السائق فوراً
-                        ->live()
+                    // بيراقب التغيير عشان يجيب بيانات السائق فوراً
+                    ->live()
 
 
+                    // -------------------------------------------------------------------------
+                    // --- الإضافة الجديدة (والوحيدة) المطلوبة لربط الأيام بالرحلة: ---
+                    // -------------------------------------------------------------------------
+                    ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
+                        $tripIds = is_array($state) ? $state : (is_string($state) ? json_decode($state, true) : []);
+                        
+                        if (empty($tripIds)) {
+                            $routeId = $get('route_id');
+                            $trips = $routeId ? \App\Models\Trip::where('route_id', $routeId)->get() : [];
+                        } else {
+                            $trips = \App\Models\Trip::whereIn('id', $tripIds)->get();
+                        }
 
-                        // -------------------------------------------------------------------------
-                        // --- الإضافة الجديدة (والوحيدة) المطلوبة لربط الأيام بالرحلة: ---
-                        // -------------------------------------------------------------------------
-                        ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
-                            $tripIds = is_array($state) ? $state : (is_string($state) ? json_decode($state, true) : []);
+                        $allDays = [];
+                        foreach ($trips as $trip) {
+                            // بنجيب الأيام من جدول الرحلات
+                            $days = $trip->days_of_week ?? []; 
+                            if (is_string($days)) {
+                                $days = json_decode($days, true) ?? [];
+                            }
+                            foreach ($days as $day) {
+                                // بنجهزها بصيغة (رقم الرحلة_رقم اليوم)
+                                $allDays[] = "{$trip->id}_{$day}";
+                            }
+                        }
+                        // بنبعتها لحقل days_of_week عشان يعرضها فوراً
+                        $set('days_of_week', $allDays); 
+                    })
+
+                    // -------------------------------------------------------------------------
+
+                    // اذالموظف حدد فقط مسار بدون رحلات : حقل الرحلات بالداتا بيز بصير null يعني طبق على رحلات المسار كلو
+                    ->dehydrateStateUsing(function ($state, Forms\Get $get) {
+                        // إذا الموظف ما اختار رحلات (المصفوفة فاضية)
+                        if (empty($state)) {
+                            $routeId = $get('route_id'); // بنجيب المسار المختار
                             
-                            if (empty($tripIds)) {
-                                $routeId = $get('route_id');
-                                $trips = $routeId ? \App\Models\Trip::where('route_id', $routeId)->get() : [];
-                            } else {
-                                $trips = \App\Models\Trip::whereIn('id', $tripIds)->get();
+                            if ($routeId) {
+                                // بنروح على جدول الرحلات، بنجيب كل الـ IDs التابعة لهاد المسار وبنرجعها كمصفوفة
+                                return \App\Models\Trip::where('route_id', $routeId)
+                                    ->pluck('id')
+                                    ->map(fn($id) => (string) $id) // بنحولهم لنصوص عشان الـ JSON
+                                    ->toArray();
                             }
+                            return null;
+                        }
 
-                            $allDays = [];
-                            foreach ($trips as $trip) {
-                                // بنجيب الأيام من جدول الرحلات
-                                $days = $trip->days_of_week ?? []; 
-                                if (is_string($days)) {
-                                    $days = json_decode($days, true) ?? [];
-                                }
-                                foreach ($days as $day) {
-                                    // بنجهزها بصيغة (رقم الرحلة_رقم اليوم)
-                                    $allDays[] = "{$trip->id}_{$day}";
-                                }
-                            }
-                            // بنبعتها لحقل days_of_week عشان يعرضها فوراً
-                            $set('days_of_week', $allDays); 
-                        })
-                        // -------------------------------------------------------------------------
+                        // إذا الموظف مختار رحلات معينة، بنحفظهم مثل ما هم
+                        return $state;
+                    })
+                    ->optionsLimit(2000)
+                    // ممكن يكون فاضي
+                    ->nullable(),
 
-
-
-                        // اذالموظف حدد فقط مسار بدون رحلات : حقل الرحلات بالداتا بيز بصير null يعني طبق على رحلات المسار كلو
-                        ->dehydrateStateUsing(function ($state, Forms\Get $get) {
-                                // إذا الموظف ما اختار رحلات (المصفوفة فاضية)
-                                if (empty($state)) {
-                                    $routeId = $get('route_id'); // بنجيب المسار المختار
-                                    
-                                    if ($routeId) {
-                                        // بنروح على جدول الرحلات، بنجيب كل الـ IDs التابعة لهاد المسار وبنرجعها كمصفوفة
-                                        return \App\Models\Trip::where('route_id', $routeId)
-                                            ->pluck('id')
-                                            ->map(fn($id) => (string) $id) // بنحولهم لنصوص عشان الـ JSON
-                                            ->toArray();
-                                    }
-                                    return null;
-                                }
-
-                                
-                                // إذا الموظف مختار رحلات معينة، بنحفظهم مثل ما هم
-                                return $state;
-                            })
-                        // ممكن يكون فاضي
-                        ->nullable(),
 
 
 
@@ -212,6 +216,7 @@ class OfferResource extends Resource
             // هاد الحقل بتجيه بيانات ايام الرحلات من جدول الرحلات لهون
             Forms\Components\Select::make('days_of_week')
                 ->label('أيام العرض المشمولة')
+                
                 ->multiple() // بيسمح بحذف واختيار أيام متعددة
                 ->options(function (Forms\Get $get) {
                     // 1. بنجيب الرحلات المختارة
@@ -250,7 +255,12 @@ class OfferResource extends Resource
                     return $options;
                 })
                 ->required()
+
                 ->live() // عشان يتحدث فوراً لما نغير الرحلات
+
+                ->disabled()
+                ->dehydrated()
+
 
                 ->placeholder('سيتم تعبئة الأيام تلقائياً عند اختيار الرحلة'),
 
@@ -352,79 +362,35 @@ class OfferResource extends Resource
                 Tables\Columns\TextColumn::make('trip_id')
                     ->label('الرحلات المشمولة')
                     ->alignCenter()
-                    
-                    ->badge() // عشان يطلعوا بشكل باجات مثل أيام الأسبوع
-                    ->color('success') // اللون الأخضر اللي طلبته
-                    
-                    // استخدمنا getStateUsing عشان نبني الداتا على كيفنا قبل ما تنعرض
+                    ->badge() 
+                    ->color('success') 
                     ->getStateUsing(function ($record) {
                         
-                        // 1. بنجيب القيمة المحفوظة بالداتا بيز
                         $rawState = $record->trip_id;
 
-                        // 2. حماية قوية: بنحول القيمة لمصفوفة نظيفة (عشان نتفادى الخطأ اللي طلعلك)
                         $tripIds = is_string($rawState) ? json_decode($rawState, true) : $rawState;
                         if (!is_array($tripIds)) {
-                            $tripIds = $tripIds ? [$tripIds] : []; // إذا كان رقم قديم بيحوله لمصفوفة، وإذا فاضي بيخليه فاضي
+                            $tripIds = $tripIds ? [$tripIds] : []; 
                         }
 
-                        // 3. المنطق الذكي تبعك:
                         if (empty($tripIds)) {
-                            // إذا المصفوفة فاضية (يعني الموظف اختار بس المسار)
-                            // بنروح بنجيب "كل" الرحلات التابعة لهاد المسار
                             $trips = \App\Models\Trip::where('route_id', $record->route_id)->get();
                         } else {
-                            // إذا الموظف مختار رحلات معينة، بنجيبهم هم بس
                             $trips = \App\Models\Trip::whereIn('id', $tripIds)->get();
                         }
 
-                        // 4. بننسق كل رحلة بالشكل اللي طلبته (الرحلة رقم X | وقت الإنطلاق: Y)
                         return $trips->map(function ($trip) {
+                            // تنسيق الوقت
                             $time = \Carbon\Carbon::parse($trip->scheduled_time)->format('g:i A');
-                            return "الرحلة رقم {$trip->id} | وقت الإنطلاق: {$time}";
-                        })->toArray(); // بنرجعهم كـ Array عشان Filament يعرض كل وحدة بـ باج لحالها
-                    }),
-
-
-
-
-                Tables\Columns\TextColumn::make('days_of_week')
-                    ->label('أيام العرض المشمولة')
-                    ->badge()
-                    ->alignCenter()
-                    ->color('success')
-                    ->getStateUsing(function ($record) {
-                        $days = $record->days_of_week; // بنجيب المصفوفة من الداتا بيز
-                        
-                        // إذا مافي أيام محددة
-                        if (empty($days) || !is_array($days)) {
-                            return null;
-                        }
-
-                        // خريطة أسماء الأيام
-                        $daysNames = [
-                            0 => 'الأحد', 1 => 'الإثنين', 2 => 'الثلاثاء', 
-                            3 => 'الأربعاء', 4 => 'الخميس', 5 => 'الجمعة', 6 => 'السبت'
-                        ];
-
-                        $formattedDays = [];
-                        foreach ($days as $item) {
-                            // بنفصل النص من عند إشارة (_)
-                            $parts = explode('_', $item);
+                            // تنسيق التاريخ اللي طلبته
+                            $date = \Carbon\Carbon::parse($trip->trip_date)->format('Y-m-d');
                             
-                            if (count($parts) == 2) {
-                                $tripId = $parts[0]; // الرقم الأول هو الرحلة
-                                $dayIndex = $parts[1]; // الرقم الثاني هو اليوم
-                                $dayName = $daysNames[$dayIndex] ?? '';
-                                
-                                // التنسيق اللي طلبته بالضبط بنحطه جوا المصفوفة
-                                $formattedDays[] = "الرحلة رقم {$tripId} ({$dayName})";
-                            }
-                        }
-                        
-                        // بنرجع المصفوفة الجديدة، و Filament لحاله رح يعرض كل عنصر كباج منفصل
-                        return $formattedDays;
+                            // النتيجة النهائية بالباج
+                            return "الرحلة رقم {$trip->id} | التاريخ: {$date} | وقت الإنطلاق: {$time}";
+                        })->toArray(); 
                     }),
+
+
 
 
 
