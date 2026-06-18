@@ -252,7 +252,10 @@ Tables\Columns\TextColumn::make('virtual_status') // هاد اسم من كيسي
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
-            ]);
+            ])
+
+            
+        ->defaultSort('created_at', 'desc');
     }
 
     public static function getRelations(): array

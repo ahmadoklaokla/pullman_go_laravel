@@ -1,9 +1,8 @@
 <?php
 
-namespace App\Filament\CompanyOwner\Resources;
+namespace App\Filament\Staff\Resources;
 
-use App\Filament\CompanyOwner\Resources\BusResource\Pages;
-use App\Filament\CompanyOwner\Resources\BusResource\RelationManagers;
+use App\Filament\Staff\Resources\BusResource\Pages;
 use App\Models\Bus;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -11,35 +10,19 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class BusResource extends Resource
 {
-
-
-
-// عشان company_id ينزل تلقائياً بدون ما صاحب الشركة يختاره
+    // عشان company_id ينزل تلقائياً
     protected static bool $isScopedToTenant = true;
 
-
-
-
     protected static ?string $model = Bus::class;
-
     protected static ?string $navigationIcon = 'heroicon-s-truck'; 
-
-// اسم القائمة على اليمين
-    protected static ?string $navigationLabel = ' باصات الشركة';
-
-    // عنوان الصفحة من الداخل
+    protected static ?string $navigationLabel = 'باصات الشركة';
     protected static ?string $pluralModelLabel = 'الباصات';
-
-    // اسم الزر عند إضافة باص جديد
     protected static ?string $modelLabel = 'باص';
 
 
-
-    
 
 public static function form(Form $form): Form
 {
@@ -113,7 +96,6 @@ public static function form(Form $form): Form
 
 
 
-
                                 // 👈 اختيار السائق من الحسابات المتاحة للشركة
                                 Forms\Components\Select::make('driver_id')
                                     ->label('السائق المخصص')
@@ -130,18 +112,18 @@ public static function form(Form $form): Form
 
 
 
-                                // 👈 حقول المعاون اليدوية
                                 Forms\Components\TextInput::make('assistant_name')
                                     ->label('اسم المعاون (اختياري)')
                                     ->placeholder('الاسم الكامل للمعاون'),
 
 
-                                    
+
                                 Forms\Components\TextInput::make('assistant_phone')
                                     ->label('رقم هاتف المعاون (اختياري)')
                                     ->tel()
                                     ->extraInputAttributes(['style' => 'direction: ltr !important; text-align: left;'])
                                     ->maxLength(15),
+
 
 
 
@@ -183,7 +165,8 @@ public static function form(Form $form): Form
 
 
 
-    public static function table(Table $table): Table
+
+   public static function table(Table $table): Table
     {
         return $table
 
@@ -208,6 +191,7 @@ public static function form(Form $form): Form
                 ->alignCenter()
                 ->weight('bold')
                 ->copyable(), // ميزة حلوة ينسخ الرقم بكبسة وحدة
+
 
 
 
@@ -264,7 +248,6 @@ public static function form(Form $form): Form
 
 
 
-
             // العمود الخاص باسم المعاون بلون برتقالي
             Tables\Columns\TextColumn::make('assistant_name')
                 ->label('المعاون')
@@ -313,7 +296,7 @@ public static function form(Form $form): Form
                 ]),
 
 
-           ], layout: Tables\Enums\FiltersLayout::AboveContent)  // عشان يظهر الفلتر فوق الجدول
+            ], layout: Tables\Enums\FiltersLayout::AboveContent)  // عشان يظهر الفلتر فوق الجدول
 
 
 
@@ -323,13 +306,15 @@ public static function form(Form $form): Form
                 Tables\Actions\DeleteAction::make(), // صاحب الشركة مسموح له يحذف باصه
             ])
 
+
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ])
 
-            ->defaultSort('created_at', 'desc');
+            
+        ->defaultSort('created_at', 'desc');
     }
 
     public static function getRelations(): array

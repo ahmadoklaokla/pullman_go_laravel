@@ -353,7 +353,9 @@ Tables\Actions\Action::make('read_message')
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
-            ]);
+            ])
+            
+        ->defaultSort('created_at', 'desc');
     }
 
 

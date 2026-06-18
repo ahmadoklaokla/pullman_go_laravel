@@ -44,6 +44,26 @@ class CityResource extends Resource
                     ->unique(ignoreRecord: true) // عشان ما يتكرر الاسم
                     ->required(),
 
+
+
+                Forms\Components\Grid::make(2)->schema([
+
+                    Forms\Components\TextInput::make('lng')
+                        ->label('خط الطول (lng)')
+                        ->numeric()
+                        ->required()
+                        ->placeholder('مثلاً: 36.2765'),
+
+
+
+                    Forms\Components\TextInput::make('lat')
+                        ->label('خط العرض (lat)')
+                        ->numeric() // يقبل أرقام فقط
+                        ->required()
+                        ->placeholder('مثلاً: 33.5138'),
+
+                ]),
+
                 
                 Forms\Components\Toggle::make('is_active')
                     ->label('حالة المدينة (نشطة)')
@@ -68,6 +88,20 @@ class CityResource extends Resource
 
             Tables\Columns\TextColumn::make('name')->label('اسم المدينة')->searchable()
             ->color('info'), // لون أزرق
+
+
+
+            Tables\Columns\TextColumn::make('lng')
+                ->label('خط الطول')
+                ->color('gray'),
+
+
+                
+            Tables\Columns\TextColumn::make('lat')
+                ->label('خط العرض')
+                ->color('gray'),
+
+
 
             Tables\Columns\IconColumn::make('is_active')
 
@@ -95,7 +129,9 @@ class CityResource extends Resource
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
-            ]);
+            ])
+            
+        ->defaultSort('created_at', 'desc');
     }
 
     public static function getRelations(): array

@@ -22,6 +22,12 @@ protected $fillable = [
 
         'start_date',
         'end_date',
+
+        
+        // هدول في حال غيرهن الماستنوظف للرحلة فقط ويبقى المعاون الاساسي موجود بالباص
+        'trip_assistant_name',
+        'trip_assistant_phone'
+        
     ];
 
 
@@ -88,5 +94,31 @@ protected $fillable = [
     {
         return $this->hasManyThrough(BookingSeat::class, Booking::class);
     }
+
+
+
+
+
+
+
+
+
+// هدول مشان الربط الصحيح تبع الاحداثيات 
+
+
+    // 1. جلب "آخر موقع الحالي" فقط للباص (وهاد اللي بنعرضه فوراً ع الخريطة)
+        public function latestLocation(): \Illuminate\Database\Eloquent\Relations\HasOne
+        {
+            return $this->hasOne(TripLocation::class)->latestOfMany();
+        }
+
+
+
+        // 2. جلب "كل النقاط والمسار السابق" للرحلة (عشان نرسم خط السير ع الخريطة)
+        public function locationLogs(): \Illuminate\Database\Eloquent\Relations\HasMany
+        {
+            return $this->hasMany(TripLocation::class);
+        }
+
 
 }

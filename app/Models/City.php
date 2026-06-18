@@ -7,7 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 class City extends Model
 {
    protected $fillable = [
-    'name', 
+    'name',
+
+    // لحساب المسافة بين اي مدينتين لانو المسافة ثابتة
+    'lat', 
+    'lng',
+
     'is_active'
     
 ];

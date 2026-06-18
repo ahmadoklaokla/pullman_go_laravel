@@ -12,6 +12,11 @@ use App\Http\Controllers\Api\TripController;
 use App\Http\Controllers\Api\BookingController;
 //كونترولر العروض
 use App\Http\Controllers\Api\OfferController;
+// كونترولر لمعالجة احداثيات الرحلة
+use App\Http\Controllers\Api\LocationController;
+
+// هاد الكونترولر تبع السائق لتسجيل الدخول
+use App\Http\Controllers\Api\DriverAuthController;
 
 
 
@@ -42,6 +47,12 @@ Route::post('/verify-reset-otp', [AuthController::class, 'verifyResetOtp']);
 
 //رابط لارسال كلمة المرور الجديدة من المستخدم 
 Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+
+
+
+// لتطبيق السائق
+// رابط لتسجيل الدخول للسائق 
+Route::post('/login-driver', [DriverAuthController::class, 'loginDriver']);
 
 
 
@@ -84,6 +95,9 @@ Route::post('/store-booking', [BookingController::class, 'store']);
 
 
 
+
+
+
 // عملت هي الحماية مشان تعديل بالملف الشخصي
 
 // 2.  الروابط المحمية (لازم توكككننن عشان تشتغل وما تضرب)
@@ -102,7 +116,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/update-profile', [AuthController::class, 'updateProfile']);
 
 
-    
     //جديد لرحلاتي 
     //لرحلاتي لقادمة والسابقة
     Route::get('/user-trips', [BookingController::class, 'getUserTrips']);
@@ -110,5 +123,13 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // مسار إلغاء الحجز الجديد
     Route::post('/cancel-booking', [TripController::class, 'cancelBooking']);
+
+
+    //الرابط الي رح يطلبو الفلاتر مشان يوخذ بيانات الرحلة من السيرفر للسائق
+    Route::get('/driver/current-trip', [App\Http\Controllers\Api\LocationController::class, 'getCurrentTrip']);
+
+
+    // رابط لاستقبال الاحداثيات من السائق
+    Route::post('/track-location', [LocationController::class, 'store']);
     
 });

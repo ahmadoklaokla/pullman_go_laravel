@@ -71,96 +71,53 @@ class OfferResource extends Resource
         return $table
 
             ->columns([
+                
+                Tables\Columns\TextColumn::make('route')
+                ->label(' المسار')
+                ->alignCenter()
+                ->formatStateUsing(fn ($record) => "من {$record->route->departureCity->name} إلى {$record->route->arrivalCity->name}")
 
-                // تبويب صفحة الاسعار
+                ->searchable(query: function (Builder $query, string $search): Builder {
+        return $query->whereHas('route.departureCity', fn ($q) => $q->where('name', 'like', "%{$search}%"))
+                     ->orWhereHas('route.arrivalCity', fn ($q) => $q->where('name', 'like', "%{$search}%"));
+    })
+                ->icon('heroicon-m-map-pin')
+                ->color('success')
+                ->iconColor('primary'),
 
-                // مدينة المغادرة
-                Tables\Columns\TextColumn::make('route.departureCity.name')
-                    ->label('من مدينة')
-                    ->color('info')
-                    ->icon('heroicon-m-map-pin'),
-
-                // مدينة الوصول
-                Tables\Columns\TextColumn::make('route.arrivalCity.name')
-                    ->label('إلى مدينة')
-                    ->color('info')
-                    ->icon('heroicon-m-map-pin'),
 
 
 
 
                 Tables\Columns\TextColumn::make('trip_id')
                     ->label('الرحلات المشمولة')
-                    ->badge() // عشان يطلعوا بشكل باجات مثل أيام الأسبوع
-                    ->color('success') // اللون الأخضر اللي طلبته
-                    
-                    // استخدمنا getStateUsing عشان نبني الداتا على كيفنا قبل ما تنعرض
+                    ->alignCenter()
+                    ->badge() 
+                    ->color('success') 
                     ->getStateUsing(function ($record) {
                         
-                        // 1. بنجيب القيمة المحفوظة بالداتا بيز
                         $rawState = $record->trip_id;
 
-                        // 2. حماية قوية: بنحول القيمة لمصفوفة نظيفة (عشان نتفادى الخطأ اللي طلعلك)
                         $tripIds = is_string($rawState) ? json_decode($rawState, true) : $rawState;
                         if (!is_array($tripIds)) {
-                            $tripIds = $tripIds ? [$tripIds] : []; // إذا كان رقم قديم بيحوله لمصفوفة، وإذا فاضي بيخليه فاضي
+                            $tripIds = $tripIds ? [$tripIds] : []; 
                         }
 
-                        // 3. المنطق الذكي تبعك:
                         if (empty($tripIds)) {
-                            // إذا المصفوفة فاضية (يعني الموظف اختار بس المسار)
-                            // بنروح بنجيب "كل" الرحلات التابعة لهاد المسار
                             $trips = \App\Models\Trip::where('route_id', $record->route_id)->get();
                         } else {
-                            // إذا الموظف مختار رحلات معينة، بنجيبهم هم بس
                             $trips = \App\Models\Trip::whereIn('id', $tripIds)->get();
                         }
 
-                        // 4. بننسق كل رحلة بالشكل اللي طلبته (الرحلة رقم X | وقت الإنطلاق: Y)
                         return $trips->map(function ($trip) {
+                            // تنسيق الوقت
                             $time = \Carbon\Carbon::parse($trip->scheduled_time)->format('g:i A');
-                            return "الرحلة رقم {$trip->id} | وقت الإنطلاق: {$time}";
-                        })->toArray(); // بنرجعهم كـ Array عشان Filament يعرض كل وحدة بـ باج لحالها
-                    }),
-
-
-
-
-                Tables\Columns\TextColumn::make('days_of_week')
-                    ->label('أيام العرض المشمولة')
-                    ->badge()
-                    ->color('success')
-                    ->getStateUsing(function ($record) {
-                        $days = $record->days_of_week; // بنجيب المصفوفة من الداتا بيز
-                        
-                        // إذا مافي أيام محددة
-                        if (empty($days) || !is_array($days)) {
-                            return null;
-                        }
-
-                        // خريطة أسماء الأيام
-                        $daysNames = [
-                            0 => 'الأحد', 1 => 'الإثنين', 2 => 'الثلاثاء', 
-                            3 => 'الأربعاء', 4 => 'الخميس', 5 => 'الجمعة', 6 => 'السبت'
-                        ];
-
-                        $formattedDays = [];
-                        foreach ($days as $item) {
-                            // بنفصل النص من عند إشارة (_)
-                            $parts = explode('_', $item);
+                            // تنسيق التاريخ اللي طلبته
+                            $date = \Carbon\Carbon::parse($trip->trip_date)->format('Y-m-d');
                             
-                            if (count($parts) == 2) {
-                                $tripId = $parts[0]; // الرقم الأول هو الرحلة
-                                $dayIndex = $parts[1]; // الرقم الثاني هو اليوم
-                                $dayName = $daysNames[$dayIndex] ?? '';
-                                
-                                // التنسيق اللي طلبته بالضبط بنحطه جوا المصفوفة
-                                $formattedDays[] = "الرحلة رقم {$tripId} ({$dayName})";
-                            }
-                        }
-                        
-                        // بنرجع المصفوفة الجديدة، و Filament لحاله رح يعرض كل عنصر كباج منفصل
-                        return $formattedDays;
+                            // النتيجة النهائية بالباج
+                            return "الرحلة رقم {$trip->id} | التاريخ: {$date} | وقت الإنطلاق: {$time}";
+                        })->toArray(); 
                     }),
 
 
@@ -168,24 +125,27 @@ class OfferResource extends Resource
 
 
 
-                // السعر الحالي (الأساسي)
-                // ملاحظة: إذا كان السعر بجدول المسار، استدعيه هيك: 'route.base_price'
-                Tables\Columns\TextColumn::make('route.base_price') 
-                    ->label('السعر الحالي')
-                    ->formatStateUsing(fn ($state) => "<s>" . number_format($state) . " ل.س</s>")  // بيطلع السعر القديم مشطوب
+
+
+            Tables\Columns\TextColumn::make('route.base_price')
+                ->label('السعر قبل الخصم (الأساسي)')
+                ->alignCenter()
+
+                //  number_format($state) إضافة الفواصل تلقائياً كل 3 أرقام.
+                // <s>...</s>:بتعمل السطر المشطوب
+                ->formatStateUsing(fn ($state) => "<s>" . number_format($state) . " ل.س</s>")  // بيطلع السعر القديم مشطوب
 
                 // حطيت ال  HTML هون لانو في عندي وسم الشطب فوق 
-                    ->html()
-                    ->color('gray')
-                    ->weight('bold'),
+                ->html()
+                ->color('gray'),  
 
 
 
-
-            // تبويب صفحة العروض  
 
             Tables\Columns\TextColumn::make('offer_price')
                 ->label(' السعر بعد الخصم (العرض)')
+                ->alignCenter()
+
                 ->formatStateUsing(fn ($state) => number_format($state) . " ل.س") 
                 ->color('success')
                 ->weight('bold'),
@@ -194,18 +154,22 @@ class OfferResource extends Resource
 
             Tables\Columns\TextColumn::make('start_date')
                 ->label('تاريخ بدء العرض')
-                ->date('Y/m/d')
-                ->sortable(),
+                ->alignCenter()
+                ->date('Y/m/d'),
 
 
             Tables\Columns\TextColumn::make('end_date')
                 ->label('تاريخ انتهاء العرض')
-                ->date('Y/m/d')
-                ->sortable(),
+                ->alignCenter()
+                ->date('Y/m/d'),
 
+
+
+                // حقل وهمي مابينحفظ بالداتا بيز
 
                 Tables\Columns\TextColumn::make('remaining_days')
                     ->label('باقي من العرض')
+                    ->alignCenter()
                     // هون بنعمل الحسبة الذكية باستخدام Carbon تبع لارافيل
 
                 // بتخليلي الحقل يظهر في الريسلورسيس ولكن بحقل وهمي بالنسبة للداتا بيز
@@ -248,16 +212,14 @@ class OfferResource extends Resource
 
 
 
+
             Tables\Columns\IconColumn::make('is_active')
                 ->label('حالة العرض')
+                ->alignCenter()
                 ->boolean(),
 
-                
-
-
             ])
-
-
+            
 
 
             ->filters([
@@ -301,7 +263,7 @@ class OfferResource extends Resource
                 ->searchable()
                 ->preload(),
 
-            ])
+            ], layout: Tables\Enums\FiltersLayout::AboveContent)  // عشان يظهر الفلتر فوق الجدول
             
 
             ->actions([

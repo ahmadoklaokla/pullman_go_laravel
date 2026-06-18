@@ -134,6 +134,7 @@ class TripResource extends Resource
                 ->dehydrated(false),
 
                 
+
             // 2. عرض عنوان الوصول بالتفصيل (للعرض فقط)
             Forms\Components\Placeholder::make('arrival_address')
                 ->label('عنوان الوصول بالتفصيل')
@@ -239,7 +240,7 @@ class TripResource extends Resource
 
             // Placeholder بيعطيني نص عادي بدون حدود 
             // 4. تفاصيل الباص والسائق (تعبئة تلقائية للقراءة فقط)
-            Forms\Components\Grid::make(3) // قسمتهن 3 أعمدة
+            Forms\Components\Grid::make(4) // قسمتهن 3 أعمدة
                 ->schema([
                     
                     // رقم اللوحة
@@ -266,29 +267,92 @@ class TripResource extends Resource
                         }),
 
 
-                    // اسم السائق
-                    Forms\Components\Placeholder::make('driver_name')
-                        ->label('اسم السائق')
-                        ->content(function (Forms\Get $get) {
-                            $busId = $get('bus_id'); 
-                            if (! $busId) return '---';
-                            
-                            return \App\Models\Bus::find($busId)?->driver_name ?? 'غير متوفر';
-                        }),
 
-                    // رقم هاتف السائق
-                    Forms\Components\Placeholder::make('driver_phone')
-                        ->label('رقم هاتف السائق')
-                        ->content(function (Forms\Get $get) {
-                            $busId = $get('bus_id'); 
-                            if (! $busId) return '---';
+                    // اسم السائق من جدول المستخدمين عن طريق العلاقة الي بموديل الباص driver
+                    Forms\Components\Placeholder::make('driver_name')
+                                ->label('اسم السائق')
+                                ->content(function (Forms\Get $get) {
+                                    $busId = $get('bus_id');
+                                    if (! $busId) return '---';
+                                    
+                        $name = \App\Models\Bus::find($busId)?->driver?->name ?? 'غير متوفر';
+                       
+                        return new \Illuminate\Support\HtmlString("<span style='color: #16a34a; font-weight: bold;'>{$name}</span>");
+                                }),
+
+
+
+
+
+                            // 4. رقم هاتف السائق (مُعدّل ليسحب من علاقة الحساب الجديد)
+                            Forms\Components\Placeholder::make('driver_phone')
+                                ->label('رقم هاتف السائق')
+                                ->content(function (Forms\Get $get) {
+                                    $busId = $get('bus_id'); 
+                                    if (! $busId) return '---';
+                                    
+                            $phone = \App\Models\Bus::find($busId)?->driver?->phone ?? 'غير متوفر';
                             
-                            return \App\Models\Bus::find($busId)?->driver_phone ?? 'غير متوفر';
-                        })
+                            return new \Illuminate\Support\HtmlString("<span style='color: #16a34a; font-weight: bold;'>{$phone}</span>");
+                                }),
+
+
+
+                    ])->columnSpanFull(),
+
+
+
+                     Forms\Components\Grid::make(4)
+                            ->schema([
+
+                            Forms\Components\Placeholder::make('assistant_name')
+                                ->label('اسم المعاون')
+                                ->content(function (Forms\Get $get) {
+                                    $busId = $get('bus_id'); 
+                                    if (! $busId) return '---';
+                                    
+                            $astName = \App\Models\Bus::find($busId)?->assistant_name ?? 'لا يوجد';
+                            
+                            return new \Illuminate\Support\HtmlString("<span style='color: #ea580c; font-weight: bold;'>{$astName}</span>");
+                                }),
+                                
+
+
+
+                            Forms\Components\Placeholder::make('assistant_phone')
+                                ->label(' رقم هاتف المعاون')
+                                ->content(function (Forms\Get $get) {
+                                    $busId = $get('bus_id'); 
+                                    if (! $busId) return '---';
+                                    
+                            $astPhone = \App\Models\Bus::find($busId)?->assistant_phone ?? 'لا يوجد';
+                          
+                            return new \Illuminate\Support\HtmlString("<span style='color: #ea580c; font-weight: bold;'>{$astPhone}</span>");
+                                })
+
+
                 ->dehydrated(false), // ما بنخزنه بجدول الرحلات لأنه موجود بالباصات     
                 ])->columnSpanFull(), // عشان تأخذ عرض الصفحة كامل       
 
 
+
+
+
+
+                    Forms\Components\TextInput::make('trip_assistant_name')
+                       ->label('⚠️ المعاون البديل (تعديل استثنائي لهذه الرحلة فقط وليس لجميع الرحلات بين الفترتين)')
+                        ->visible(fn (string $operation): bool => $operation === 'edit')    //يظهر عند التعديل فقط
+                        ->placeholder('أتركه فارغاً إذا كنت تريد الاعتماد على المعاون الأساسي المعروض فوق')
+                        ->columnSpan(1),
+
+
+
+                    Forms\Components\TextInput::make('trip_assistant_phone')
+                        ->label('اكتب الرقم هنا لتغييره في هذه الرحلة فقط')
+                        ->tel()
+                        ->visible(fn (string $operation): bool => $operation === 'edit')   //يظهر عند التعديل فقط
+                        ->placeholder('أتركه فارغاً إذا كنت تريد الاعتماد على الرقم المعروض فوق')
+                        ->columnSpan(1),
 
 
 
@@ -429,7 +493,7 @@ public static function getEloquentQuery(): Builder
             Tables\Columns\TextColumn::make('bus.bus_numbernnn')
                 ->label('رقم الباص')
                 ->alignCenter()
-                ->description(fn ($record) => "السائق: " . $record->bus->driver_name),
+                ->description(fn ($record) => "السائق: " . $record->bus->driver?->name ?? 'غير متوفر'),
 
 
 

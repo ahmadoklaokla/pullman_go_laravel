@@ -20,8 +20,13 @@ class Bus extends Model
         'bus_number',
 
 
-        'driver_name',
-        'driver_phone',
+
+        'driver_id',
+
+        'assistant_name',
+        'assistant_phone',
+
+
         'total_seats',
         'bus_model',
         'status',
@@ -47,9 +52,18 @@ class Bus extends Model
 
 
     
-    public function trips() 
+    public function trips()
     {
-         return $this->hasMany(Trip::class); 
+         return $this->hasMany(Trip::class);
+    }
+
+
+
+
+    // علاقة الباص مع السائق (المستخدم)
+    public function driver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'driver_id');
     }
 
 

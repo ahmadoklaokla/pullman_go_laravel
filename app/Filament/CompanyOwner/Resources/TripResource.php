@@ -38,29 +38,36 @@ class TripResource extends Resource
 
 
 
-        // مشان يعرضلي فقط الرحلات التابعة لهاد المسار الي تابع لهي الشركة 
-    public static function getEloquentQuery(): Builder
-    {
-        return parent::getEloquentQuery()
-            ->whereHas('route', function ($query) {
-                // فلترة الرحلات بناءً على شركة المسار
-                $query->where('company_id', auth()->user()->company_id);
-            });
-    }
-
+    // مشان يعرضلي فقط الرحلات التابعة لهاد المسار الي تابع لهي الشركة 
+public static function getEloquentQuery(): Builder
+{
+    return parent::getEloquentQuery()
+        ->whereHas('route', function ($query) {
+            $query->where('company_id', auth()->user()->company_id);
+        })
+        // مشان ما يطلعلي سجلات كثير من الرحلات عند الموظف لانو فقط بال db 
+        ->whereIn('id', function ($query) {
+            $query->selectRaw('MIN(id)')
+                ->from('trips')
+                ->groupBy('route_id', 'bus_id', 'scheduled_time');
+        });
+}
 
 
     
 
 
+
     public static function table(Table $table): Table
     {
         return $table
+        
             ->columns([
-                
-            // 1. المسار (من مدينة إلى مدينة)
+
+                // 1. المسار (من مدينة إلى مدينة)
             Tables\Columns\TextColumn::make('route')
                 ->label('المسار')
+                ->alignCenter()
                 ->formatStateUsing(fn ($record) => 
                     "من " . ($record->route->departureCity->name ?? '؟') . 
                     " إلى " . ($record->route->arrivalCity->name ?? '؟')
@@ -83,79 +90,129 @@ class TripResource extends Resource
             // 2. الباص
             Tables\Columns\TextColumn::make('bus.bus_numbernnn')
                 ->label('رقم الباص')
-                ->description(fn ($record) => "السائق: " . $record->bus->driver_name)
-                ->sortable(),
+                ->alignCenter()
+                ->description(fn ($record) => "السائق: " . $record->bus->driver?->name ?? 'غير متوفر'),
 
 
 
             // 3. وقت الانطلاق (تنسيق 12 ساعة مع AM/PM)
             Tables\Columns\TextColumn::make('scheduled_time')
                 ->label('موعد الانطلاق')
+                ->alignCenter()
                 ->time('h:i A') // بيعرض الوقت مثلاً 09:00 AM
-                ->sortable()
                 ->color('primary')
                 ->weight('bold'),
 
 
 
-            // 4. أيام العمل (بتظهر كـ باجات ملونة)
+
+
             Tables\Columns\TextColumn::make('days_of_week')
                 ->label('أيام الرحلة')
-                ->badge()
-                ->formatStateUsing(fn (int $state): string => match ($state) {
-                    0 => 'الأحد', 1 => 'الإثنين', 2 => 'الثلاثاء', 3 => 'الأربعاء',
-                    4 => 'الخميس', 5 => 'الجمعة', 6 => 'السبت',
-                    default => 'غير معروف',
-                })
-                ->color('success'),
+                ->alignCenter()
+                ->html()
+
+                ->formatStateUsing(function ($record) {
+                    // تحويل البيانات لمصفوفة  (سواء كانت مخزنة Array أو JSON)
+                    $days = $record->days_of_week;
+                    if (!is_array($days)) {
+                        $days = json_decode($days, true) ?? [];
+                    }
+                    // خريطة تحويل الأرقام لأسماء الأيام
+                    $daysMap = [
+                        0 => 'الأحد', 
+                        1 => 'الإثنين', 
+                        2 => 'الثلاثاء', 
+                        3 => 'الأربعاء',
+                        4 => 'الخميس', 
+                        5 => 'الجمعة', 
+                        6 => 'السبت'
+                    ];
+                    // تحويل كل يوم لكبسولة خضراد
+                    $badges = collect($days)->map(function ($day) use ($daysMap) {
+                        $dayName = $daysMap[$day] ?? 'غير معروف';
+                        return "<span style='white-space: nowrap; border: 1px solid #22c55e; background-color: rgba(34, 197, 94, 0.1); color: #22c55e; padding: 2px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: bold;'>{$dayName}</span>";
+                    })->implode(' ');
+
+                    // الحاوية الخارجية بتجبرهم يضلوا بسطر واحد (nowrap) وبتوسطهم بالخلية
+                    return "<div style='display: flex; flex-wrap: nowrap; justify-content: center; gap: 6px; white-space: nowrap;'>{$badges}</div>";
+                }),
 
 
             
 
             Tables\Columns\TextColumn::make('route.distance')
                 ->label('المسافة (كم)')
+                ->alignCenter()
                 ->formatStateUsing(fn ($state) => number_format($state)) 
                 ->color('gray'),
 
 
             Tables\Columns\TextColumn::make('route.estimated_time')
                 ->label(' الوقت التقريبي للرحلة')
+                ->alignCenter()
                 ->color('gray'),
 
 
 
             Tables\Columns\TextColumn::make('route.base_price')
                 ->label('سعر التذكرة ')
+                ->alignCenter()
                 ->formatStateUsing(fn ($state) => number_format($state) . " ل.س") 
                 ->color('success') // بخلي السعر لونه أخضر
                 ->weight('bold'),
 
 
 
+//  ساستخدمها للحجز لاحقا 
+
+            // Tables\Columns\TextColumn::make('trip_date')
+            //     ->label('تاريخ الرحلة')
+
+            //     // translatedFormat('l'): بتجيب اسم اليوم باللغة العربية
+            //     ->formatStateUsing(fn ($state) => \Carbon\Carbon::parse($state)->translatedFormat('l Y-m-d'))
+            //     ->color('success')
+            //     ->weight('bold'),   // بيخلي الخط عريض,
 
 
-            // 5. حالة الرحلة (تبديل فوري من الجدول)
-            Tables\Columns\IconColumn::make('is_active')
+
+
+            // 5. حالة الرحلة (مافي داعي لهاد الكود بس للاحتياط)
+            Tables\Columns\ToggleColumn::make('is_active')
+                ->alignCenter()
                 ->label('نشطة')
-                ->boolean(), // فقط للعرض على حسب الموظف شو مختار
 
+                // مشان لما اعدل هاد الزر من الجدول ينحفظ او يمر بصفحة التعديل تبعيت الرحلات Edit.php
+                ->updateStateUsing(function ($record, $state) {
+                    // 1. بنحدث السطر الحالي
+                    $record->update(['is_active' => $state]);
+                    
+                    // 2. بنحدث كل الرحلات المكررة التابعة إله
+                    \App\Models\Trip::where('route_id', $record->route_id)
+                        ->where('bus_id', $record->bus_id)
+                        ->where('scheduled_time', $record->scheduled_time)
+                        ->update(['is_active' => $state]);
+                }),
+
+            
 
             Tables\Columns\TextColumn::make('created_at')
                 ->label('تاريخ إنشاء الرحلة')
+                ->alignCenter()
                 ->dateTime('Y-m-d H:i') // هون بحدد التنسيق 
-                ->sortable() // مشان ترتب الشركات من الأحدث للأقدم
                 ->color('success'), // لون اخضر
+
 
 
 
             ])
 
 
-            
 
 
             ->filters([
-                
+
+            
             // فلتر حسب المسار
             Tables\Filters\SelectFilter::make('route_id')
                 ->label('تصفية حسب المسار')
@@ -186,9 +243,10 @@ class TripResource extends Resource
                 ->searchable()
                 ->preload(),
 
-                
 
-            // فلترة حسب اليوم
+//  empty('0') بترجع true (يعني بيعتبرها فاضية)، وهاد اللي كان يخرب عليك يوم الأحد.
+// filled('0') بترجع true (بيعتبرها فيها قيمة)، وهيك السيستم بيعرف إنك قاصد يوم الأحد وبنفذ الفلترة صح
+
             Tables\Filters\SelectFilter::make('day')
                     ->label('الفلترة حسب اليوم')
                     ->options([
@@ -211,15 +269,29 @@ class TripResource extends Resource
                         return $query;
                     }),
 
-            ])
+            ], layout: Tables\Enums\FiltersLayout::AboveContent)  // عشان يظهر الفلتر فوق الجدول
 
 
 
             ->actions([
-                Tables\Actions\DeleteAction::make(),
 
-                
+            
+                // مشان لما احذف سطر واحد من جدول الرحلات يحذفلي كلشي رحلات مكررة لهاد السجل (السطر)
+                Tables\Actions\DeleteAction::make()
+                    ->action(function ($record) {
+                        // رح نحذف كل الرحلات اللي إلها نفس المسار والباص وموعد الانطلاق تبع السطر اللي ضغطت عليه
+                        \App\Models\Trip::where('route_id', $record->route_id)
+                            ->where('bus_id', $record->bus_id)
+                            ->where('scheduled_time', $record->scheduled_time)
+                            ->delete();
+                    }),
             ])
+
+
+
+
+
+    
 
             
             ->bulkActions([
@@ -227,9 +299,14 @@ class TripResource extends Resource
                 Tables\Actions\BulkActionGroup::make([
 
                 ]),
-            ]);
+            ])
+
+            // هي مشان تطلع احدث الرحلات اول شي 
+            ->defaultSort('created_at', 'desc');
     }
 
+
+    
     public static function getRelations(): array
     {
         return [

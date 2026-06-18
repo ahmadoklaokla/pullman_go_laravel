@@ -101,8 +101,8 @@ class User extends Authenticatable implements FilamentUser, HasTenants, HasAvata
     public function canAccessPanel(Panel $panel): bool
     {
 
-         // إذا كان المستخدم مسافر، امنعه فوراً من كل اللوحات
-        if ($this->role === 'passenger') {
+         // إذا كان المستخدم مسافر او سائق ، امنعه فوراً من كل اللوحات
+        if (in_array($this->role, ['passenger', 'driver'])) {
             return false;
         }
 
@@ -172,26 +172,26 @@ public function getFilamentName(): string
 
 
     // الدالة السحرية اللي بتجيب اللوغو للدائرة للوحات التحكم الي عندي
-public function getFilamentAvatarUrl(): ?string
-{
-    // 1. إذا كان المستخدم الحالي داخل لوحة الأدمن (أو لديه صلاحية دخولها)
-    // بنعرض له الصورة الشخصية اللي رفعها من الـ Profile
+    public function getFilamentAvatarUrl(): ?string
+    {
+        // 1. إذا كان المستخدم الحالي داخل لوحة الأدمن (أو لديه صلاحية دخولها)
+        // بنعرض له الصورة الشخصية اللي رفعها من الـ Profile
 
 
-// 1. الأولوية القصوى: إذا المستخدم (أدمن، صاحب شركة، أو موظف) رفع صورة شخصية
-    if ($this->avatar_url) {
-        return asset('storage/' . $this->avatar_url);
+    // 1. الأولوية القصوى: إذا المستخدم (أدمن، صاحب شركة، أو موظف) رفع صورة شخصية
+        if ($this->avatar_url) {
+            return asset('storage/' . $this->avatar_url);
+        }
+
+        // 2. إذا كان المستخدم هو "صاحب شركة" (دخل لوحة الشركة)
+        // بنعرض له لوغو الشركة الخاص فيه حصراً
+        if ($this->company && $this->company->logo_url) {
+            return asset('storage/' . $this->company->logo_url);
+        }
+
+        // 3. الحالة الافتراضية (أول حرف من الاسم)
+        return null;
     }
-
-    // 2. إذا كان المستخدم هو "صاحب شركة" (دخل لوحة الشركة)
-    // بنعرض له لوغو الشركة الخاص فيه حصراً
-    if ($this->company && $this->company->logo_url) {
-        return asset('storage/' . $this->company->logo_url);
-    }
-
-    // 3. الحالة الافتراضية (أول حرف من الاسم)
-    return null;
-}
 
 
 
@@ -210,10 +210,14 @@ public function getFilamentAvatarUrl(): ?string
         return $this->role === 'admin';
     }
 
+
+
     public function isOwner(): bool
     {
         return $this->role === 'owner';
     }
+
+
 
     public function isStaff(): bool
     {
@@ -221,14 +225,26 @@ public function getFilamentAvatarUrl(): ?string
     }
 
 
+
     // المسافر فقط هو الي بيحجز 
-    public function isPassenger(): bool
-{
-    return $this->role === 'passenger';
-}
+        public function isPassenger(): bool
+    {
+        return $this->role === 'passenger';
+    }
 
 
 
 
+        public function isDriver(): bool
+    {
+        return $this->role === 'driver';
+    }
 
+
+    // السائق له أكثر من باص مسجل باسمه (ممكن)
+    public function buses(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Bus::class, 'driver_id');
+    }
+    
 }

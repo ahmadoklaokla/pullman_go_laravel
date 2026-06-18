@@ -567,7 +567,7 @@ class TripResource extends Resource
                         return $query;
                     }),
 
-            ])
+            ], layout: Tables\Enums\FiltersLayout::AboveContent)  // عشان يظهر الفلتر فوق الجدول
 
 
 

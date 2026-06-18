@@ -315,7 +315,9 @@ Section::make('إضافة موظف (اختياري)')
             Tables\Actions\DeleteAction::make(),
             
             ])
-            ->bulkActions([Tables\Actions\DeleteBulkAction::make()]);
+            ->bulkActions([Tables\Actions\DeleteBulkAction::make()])
+
+        ->defaultSort('created_at', 'desc');
     }
 
     public static function getPages(): array

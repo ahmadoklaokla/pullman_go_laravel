@@ -55,45 +55,137 @@ class RouteResource extends Resource
 // اختيار مدينة الانطلاق (الربط الجديد)
             Forms\Components\Select::make('departure_city_id')
                 ->label('مدينة الانطلاق')
-                ->options(\App\Models\City::where('is_active', true)->pluck('name', 'id')) // فقط المدن النشطة
                 ->searchable()
                 ->live()
                 ->required()
-
-
                 ->options(function (Forms\Get $get) {
                     $arrivalId = $get('arrival_city_id');
                     $query = \App\Models\City::where('is_active', true);
-                    
                     if ($arrivalId) {
                         $query->where('id', '!=', $arrivalId); // إخفاء مدينة الوصول
                     }
-                    
                     return $query->pluck('name', 'id');
+                })
+                ->afterStateUpdated(function (Forms\Get $get, Forms\Set $set) {
+                    $departureId = $get('departure_city_id');
+                    $arrivalId = $get('arrival_city_id');
+
+                    if ($departureId && $arrivalId) {
+                        $departure = \App\Models\City::find($departureId);
+                        $arrival = \App\Models\City::find($arrivalId);
+
+                        if ($departure?->lat && $departure?->lng && $arrival?->lat && $arrival?->lng) {
+                            $url = "https://router.project-osrm.org/route/v1/driving/{$departure->lng},{$departure->lat};{$arrival->lng},{$arrival->lat}?overview=false";
+
+                            try {
+                                $response = file_get_contents($url);
+                                $data = json_decode($response, true);
+
+                                // 1. حساب المسافة
+                                if (isset($data['routes'][0]['distance'])) {
+                                    $distanceInKm = round($data['routes'][0]['distance'] / 1000);
+                                    $set('distance', $distanceInKm);
+                                } else {
+                                    $set('distance', null);
+                                }
+
+                                // 2. حساب الوقت التقريبي (الإضافة الجديدة هنا 👇)
+                                if (isset($data['routes'][0]['duration'])) {
+                                    // الوقت بيجي بالثواني، بنحوله لساعات ودقائق
+                                    $durationInSeconds = $data['routes'][0]['duration'];
+                                    $hours = floor($durationInSeconds / 3600);
+                                    $minutes = floor(($durationInSeconds % 3600) / 60);
+
+                                    // تنسيق النص عشان يطلع بشكل حلو للمستخدم
+                                    if ($hours > 0) {
+                                        $timeString = "{$hours} ساعة و {$minutes} دقيقة";
+                                    } else {
+                                        $timeString = "{$minutes} دقيقة";
+                                    }
+                                    
+                                    // نزرع الوقت في الحقل تبعك
+                                    $set('estimated_time', $timeString);
+                                } else {
+                                    $set('estimated_time', null);
+                                }
+
+                            } catch (\Exception $e) {
+                                $set('distance', null);
+                                $set('estimated_time', null);
+                            }
+                        }
+                    } else {
+                        $set('distance', null);
+                        $set('estimated_time', null);
+                    }
                 }),
-                
 
 
 
 
-
-            // اختيار مدينة الوصول (مع منع التكرار)
+            // اختيار مدينة الوصول
             Forms\Components\Select::make('arrival_city_id')
-
                 ->label('مدينة الوصول')
                 ->searchable()
+                ->live() 
                 ->required()
-
-                
                 ->options(function (Forms\Get $get) {
                     $departureId = $get('departure_city_id');
                     $query = \App\Models\City::where('is_active', true);
-                    
                     if ($departureId) {
                         $query->where('id', '!=', $departureId); // إخفاء مدينة الانطلاق
                     }
-                    
                     return $query->pluck('name', 'id');
+                })
+                ->afterStateUpdated(function (Forms\Get $get, Forms\Set $set) {
+                    $departureId = $get('departure_city_id');
+                    $arrivalId = $get('arrival_city_id');
+
+                    if ($departureId && $arrivalId) {
+                        $departure = \App\Models\City::find($departureId);
+                        $arrival = \App\Models\City::find($arrivalId);
+
+                        if ($departure?->lat && $departure?->lng && $arrival?->lat && $arrival?->lng) {
+                            $url = "https://router.project-osrm.org/route/v1/driving/{$departure->lng},{$departure->lat};{$arrival->lng},{$arrival->lat}?overview=false";
+
+                            try {
+                                $response = file_get_contents($url);
+                                $data = json_decode($response, true);
+
+                                // 1. حساب المسافة
+                                if (isset($data['routes'][0]['distance'])) {
+                                    $distanceInKm = round($data['routes'][0]['distance'] / 1000);
+                                    $set('distance', $distanceInKm);
+                                } else {
+                                    $set('distance', null);
+                                }
+
+                                // 2. حساب الوقت التقريبي (الإضافة الجديدة هنا 👇)
+                                if (isset($data['routes'][0]['duration'])) {
+                                    $durationInSeconds = $data['routes'][0]['duration'];
+                                    $hours = floor($durationInSeconds / 3600);
+                                    $minutes = floor(($durationInSeconds % 3600) / 60);
+
+                                    if ($hours > 0) {
+                                        $timeString = "{$hours} ساعة و {$minutes} دقيقة";
+                                    } else {
+                                        $timeString = "{$minutes} دقيقة";
+                                    }
+                                    
+                                    $set('estimated_time', $timeString);
+                                } else {
+                                    $set('estimated_time', null);
+                                }
+
+                            } catch (\Exception $e) {
+                                $set('distance', null);
+                                $set('estimated_time', null);
+                            }
+                        }
+                    } else {
+                        $set('distance', null);
+                        $set('estimated_time', null);
+                    }
                 }),
 
 
@@ -161,15 +253,19 @@ class RouteResource extends Resource
                 ->schema([
 
             Forms\Components\TextInput::make('distance')
-                ->label('المسافة')
+                ->label(' سيتم حساب المسافة تلقائياً بمجرد اختيارك للمدينتين')
                 ->integer() 
                 ->suffix('كم')
+                ->disabled() // 👈 يمنع الموظف من التعديل اليدوي ويجعله للقراءة فقط
+                ->dehydrated() // 👈 إجباري عشان الفلامينت يحفظ القيمة بالداتابيز حتى لو الحقل ديسيبلد
                 ->required(),
 
 
             Forms\Components\TextInput::make('estimated_time')
                 ->label(' المدة الزمنية التقريبية للرحلة')
-                ->required(),
+                ->required()
+                ->disabled()
+                ->dehydrated()
                 ])->columns(2),
 
 
@@ -186,8 +282,6 @@ class RouteResource extends Resource
 
 
     }
-
-
 
 
 
@@ -227,6 +321,16 @@ class RouteResource extends Resource
             ->label('المسافة (كم)'),
 
 
+
+            Tables\Columns\TextColumn::make('estimated_time')
+                ->label('المدة الزمنية القانونية')
+                ->searchable()
+                ->sortable()
+                ->placeholder('غير محددة'),
+
+
+
+
             Tables\Columns\TextColumn::make('base_price')->label('السعر الأساسي')->money('SYP')
             ->formatStateUsing(fn ($state) => number_format($state)   . "  ل.س")
             ->color('success'), // لون اخضر
@@ -251,7 +355,9 @@ class RouteResource extends Resource
             Tables\Filters\SelectFilter::make('company_id')
                 ->relationship('company', 'name')
                 ->label('فلترة حسب الشركة'),
-            ])
+                
+            ], layout: Tables\Enums\FiltersLayout::AboveContent)  // عشان يظهر الفلتر فوق الجدول
+
 
 
 

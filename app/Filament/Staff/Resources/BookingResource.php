@@ -366,17 +366,28 @@ class BookingResource extends Resource
                             
                             if (! $tripId) return '⚠️ يرجى اختيار رحلة أولاً لعرض بيانات الباص';
 
-                            // بنجيب الرحلة مع علاقة الباص
-                            $trip = \App\Models\Trip::with('bus')->find($tripId);
+                        // 1. بنجيب الرحلة مع علاقة الباص وعلاقة السائق تبعه مشان ما يضرب السيستم
+                            $trip = \App\Models\Trip::with('bus.driver')->find($tripId);
                             $bus = $trip?->bus;
 
                             if (! $bus) return '❌ لا يوجد باص مرتبط بهذه الرحلة';
 
-                            // التنسيق النهائي (تأكد من مسميات الحقول في قاعدة بياناتك)
-                            return "🚌 باص رقم: {$bus->bus_numbernnn} | 👨‍✈️ السائق: {$bus->driver_name} | 📱 هاتف: {$bus->driver_phone}";
-                        })
-                        // إضافة لون وتنسيق عشان الموظف يلاحظ البيانات فوراً
-                        ->extraAttributes(['style' => 'color: #10b981; font-weight: bold;']) 
+                        // 2. استخراج البيانات (السائق من علاقة المستخدمين، والمعاون من جدول الباص مباشرة)
+                                $busNumber = $bus->bus_numbernnn ?? 'غير معروف';
+                                $driverName = $bus->driver?->name ?? 'غير متوفر';
+                                $driverPhone = $bus->driver?->phone ?? 'غير متوفر';
+                                $assistantName = $bus->assistant_name ?? 'لا يوجد';
+                                $assistantPhone = $bus->assistant_phone ?? 'لا يوجد';
+
+                        // 3.التنسيق بالألوان (أخضر للسائق وبرتقالي للمعاون) داخل مصفوفة HTML
+                                return new \Illuminate\Support\HtmlString("
+                                    <span>🚌 باص رقم: <b>{$busNumber}</b></span>
+                                    <span style='margin: 0 8px; color: #ccc;'>|</span>
+                                    <span style='color: #16a34a; font-weight: bold;'>👨‍✈️ السائق: {$driverName} (📱 {$driverPhone})</span> 
+                                    <span style='margin: 0 8px; color: #ccc;'>|</span>
+                                    <span style='color: #ea580c; font-weight: bold;'>🤝 المعاون: {$assistantName} (📱 {$assistantPhone})</span>
+                                ");
+                            })
                         ->columnSpanFull(),
 
 
@@ -394,18 +405,6 @@ class BookingResource extends Resource
                         ->columnSpan(5),
 
 
-    
-
-                        Forms\Components\Select::make('user_id')
-                        ->label('الراكب')
-                        ->relationship(
-                            name: 'user',
-                            titleAttribute: 'name',
-                            // 🟢 بيجيب فقط المستخدمين اللي رتبتهم passenger
-                            modifyQueryUsing: fn ($query) => $query->where('role', 'passenger') 
-                        )
-                        ->searchable()
-                        ->preload(),
 
 
                     Forms\Components\TextInput::make('seats_count')
@@ -873,8 +872,8 @@ public static function table(Table $table): Table
                         
                         if (! $tripId) return 'يرجى اختيار رحلة أولاً';
 
-                        // بنجيب بيانات الرحلة ومعها الباص المرتبط فيها
-                        $trip = \App\Models\Trip::with('bus')->find($tripId);
+                        // بنجيب بيانات الرحلة ومعها الباص المرتبط فيها مع علاقة السائق المربوط بالباص 
+                        $trip = \App\Models\Trip::with('bus.driver')->find($tripId);
                         $bus = $trip?->bus;
 
                         if (! $bus) return 'لا يوجد باص مرتبط بهذه الرحلة';
@@ -891,23 +890,81 @@ public static function table(Table $table): Table
 
 
 
-                    return new \Illuminate\Support\HtmlString("
-                                <div>🚌 باص رقم: {$bus->bus_numbernnn} | 👨‍✈️ السائق: {$bus->driver_name} | 📱 هاتف: {$bus->driver_phone}</div>
-                                <div style='margin-top: 10px;'>📝 عدد الحجوزات (الطلبات) : {$bookingscount}</div>
-                                <div style='margin-top: 10px; padding-right: 40px;'>💺 عدد المقاعد الكلي : {$bus->total_seats}</div>
-                                <div style='margin-top: 10px; padding-right: 40px;'>🔴 المقاعد المحجوزة : {$bookedSeats}</div>
-                                <div style='margin-top: 10px; padding-right: 40px;'>🟢 المقاعد المتاحة : {$availableSeats}</div>
-                            ");
-                        })
+                // 2.استخراج المتغيرات الجديدة للـطاقم
+                        $busNumber = $bus->bus_numbernnn ?? 'غير معروف';
+                        $driverName = $bus->driver?->name ?? 'غير متوفر';
+                        $driverPhone = $bus->driver?->phone ?? 'غير متوفر';
+                        $assistantName = $bus->assistant_name ?? 'لا يوجد';
+                        $assistantPhone = $bus->assistant_phone ?? 'لا يوجد';
 
-                    // padding-right: 25px;  لعمل مسافة او ازاحة من بداية السطر
-                    ->extraAttributes([
-                        'style' => 'color: #10b981; font-weight: bold; font-size: 0.95rem; line-height: 1.6;'
-                    ])
 
-                    ->columnSpanFull(), //  ياخد العرض كامل
-        ])
+                        // في حال تم تغيير المعاون التابع لهذه الرحلة
+$emergencyAssistantHtml = '';
+if (!empty($trip->trip_assistant_name) || !empty($trip->trip_assistant_phone)) {
+    $eName = $trip->trip_assistant_name ?? 'غير معروف';
+    $ePhone = $trip->trip_assistant_phone ?? 'غير معروف';
+    
+    $emergencyAssistantHtml = "
+        <div style='margin-top: 16px; padding: 14px 18px; background-color: #000000; border: 2px dashed #ea580c; border-radius: 10px;'>
+            <div style='color: #fb923c; font-weight: bold; display: flex; align-items: center; gap: 8px; font-size: 1rem;'>
+                <span>⚠️</span> <span>تنبيه: تم تغيير المعاون الاستثنائي لهذه الرحلة:</span>
+            </div>
+            <div style='margin-top: 6px; padding-right: 25px; color: #f97316; display: flex; gap: 15px; flex-wrap: wrap;'>
+                <span>👤 الاسم: <span style='color: #ffffff;'>{$eName}</span></span>
+                <span style='color: #ea580c;'>|</span>
+                <span>📱 موبايل: <span style='color: #cbd5e1; font-family: monospace;'>{$ePhone}</span></span>
+            </div>
+        </div>
+    ";
+}
 
+// إرجاع التصميم بالملي (الطاقم داخل كروت سوداء + الإحصائيات أسطر عادية بدون كروت)
+return new \Illuminate\Support\HtmlString("
+    <div style='display: flex; flex-direction: column; gap: 16px; font-family: system-ui, -apple-system, sans-serif; direction: rtl;'>
+        
+        <div style='display: flex; flex-wrap: wrap; gap: 12px;'>
+            
+            <div style='flex: 1; min-width: 180px; padding: 14px; background: #000000; border: 1px solid #27272a; border-right: 6px solid #3b82f6; border-radius: 10px;'>
+                <div style='color: #a1a1aa; font-size: 0.85rem; font-weight: bold; margin-bottom: 4px;'>🚌 بيانات الحافلة</div>
+                <div style='color: #ffffff; font-size: 0.95rem;'>باص رقم: <b style='color: #3b82f6; font-size: 1.1rem;'>{$busNumber}</b></div>
+            </div>
+            
+            <div style='flex: 2; min-width: 280px; padding: 14px; background: #000000; border: 1px solid #27272a; border-right: 6px solid #16a34a; border-radius: 10px;'>
+                <div style='color: #a1a1aa; font-size: 0.85rem; font-weight: bold; margin-bottom: 8px;'>👨‍✈️ السائق</div>
+                <div style='display: flex; gap: 15px; flex-wrap: wrap; color: #ffffff; font-size: 0.95rem;'>
+                    <span><b>👤 الاسم:</b> <span style='color: #4ade80; font-weight: 600;'>{$driverName}</span></span>
+                    <span style='color: #27272a;'>|</span>
+                    <span><b>📱 موبايل:</b> <span style='color: #cbd5e1; font-family: monospace;'>{$driverPhone}</span></span>
+                </div>
+            </div>
+            
+            <div style='flex: 2; min-width: 280px; padding: 14px; background: #000000; border: 1px solid #27272a; border-right: 6px solid #ea580c; border-radius: 10px;'>
+                <div style='color: #a1a1aa; font-size: 0.85rem; font-weight: bold; margin-bottom: 8px;'>🤝 المعاون الأساسي </div>
+                <div style='display: flex; gap: 15px; flex-wrap: wrap; color: #ffffff; font-size: 0.95rem;'>
+                    <span><b>👤 الاسم:</b> <span style='color: #f97316; font-weight: 600;'>{$assistantName}</span></span>
+                    <span style='color: #27272a;'>|</span>
+                    <span><b>📱 موبايل:</b> <span style='color: #cbd5e1; font-family: monospace;'>{$assistantPhone}</span></span>
+                </div>
+            </div>
+            
+        </div>
+
+        <div style='color: #ffffff; font-size: 1rem;'>
+            <div style='margin-top: 10px;'>📝 عدد الحجوزات (الطلبات) : <span style='font-weight: bold;'>{$bookingscount}</span></div>
+            <div style='margin-top: 10px; padding-right: 40px;'>💺 عدد المقاعد الكلي : <span style='font-weight: bold;'>{$bus->total_seats}</span></div>
+            <div style='margin-top: 10px; padding-right: 40px; color: #dc2626; font-weight: bold;'>🔴 المقاعد المحجوزة : {$bookedSeats}</div>
+            <div style='margin-top: 10px; padding-right: 40px; color: #16a34a; font-weight: bold;'>🟢 المقاعد المتاحة : {$availableSeats}</div>
+        </div>
+
+        {$emergencyAssistantHtml}
+
+    </div>
+");
+
+}) // <--- إغلاق حقل الـ HTML
+->columnSpanFull(),
+
+]) // <--- إغلاق مصفوفة الحقول لنموذج الفلترة
                 ->query(function (Builder $query, array $data): Builder {
                     return $query
                         ->when($data['route_id'], fn ($q, $routeId) => $q->whereHas('trip', fn($t) => $t->where('route_id', $routeId)))
@@ -982,6 +1039,7 @@ public static function table(Table $table): Table
 
         ], layout: Tables\Enums\FiltersLayout::AboveContent)  // عشان يظهر الفلتر فوق الجدول
                     
+
 
 
 
