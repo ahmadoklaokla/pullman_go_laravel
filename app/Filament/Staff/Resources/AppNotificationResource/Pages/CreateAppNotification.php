@@ -31,58 +31,57 @@ class CreateAppNotification extends CreateRecord
 
 
 
-    protected function afterCreate(): void
-{
-    $record = $this->record;
-    $user = auth()->user();
-    
-
-    $company = $user->company;
-    // هاد$company->name  وهاد $company->logo_url مفاتيح مشان الفايربيز
-    $name = $company->name ?? 'PULLMAN GO';
-    $logo_url = $company->logo_url ?? ''; 
-
-    // تحويل المسار لرابط كامل (عشان الفلاتر يشوف الصورة)
-    // الكود بفوت على ملف شركة الموظف الي بعث الاشعار وبوخذ حقل الlogo_url عن طريق المسار storage
-    $fullLogoUrl = $logo_url ? asset('storage/' . $logo_url) : asset('images/default-logo.png');
-
-    // شريط الاشعارات try
-    try {
-        $messaging = app('firebase.messaging');
-        // topic العنوان 
-        // passenger القناة الموجودة بالفايربيز
-
-// withTarget('topic', 'passenger') هي القناة او العنوان الي رح يبعثه اللارافيل 
-// رح يبعثه على القناة الي موجودة بالفايربيز
-        $message = CloudMessage::withTarget('topic', 'passenger')
+protected function afterCreate(): void
+    {
+        $record = $this->record;
+        $user = auth()->user();
+        $companyId = $user->company_id;
         
-        // Notification::create هون حددت العنوان ومحتوى الرسالة مشان يظهرو بشريط الاشعارات بالموبايل من فوق
-        // withImageUrl تقوم باظهار لوغو الشركة في شريط الاشعارات بشكل مصغر او مكبر حب نوع الموبايل
-            ->withNotification(Notification::create($record->title, $record->content)
-                ->withImageUrl($fullLogoUrl))
+        $name = $user->company->name ?? 'PULLMAN GO';
+        $logo_url = $user->company->logo_url ?? ''; 
+        $fullLogoUrl = $logo_url ? asset('storage/' . $logo_url) : asset('images/default-logo.png');
+
+        try {
+            $messaging = app('firebase.messaging');
             
+            // 🟢 فحص الـ 3 حالات وتحديد الهدف بالظبط
+            if ($record->target_role === 'driver') {
+                if ($record->send_to_all_drivers) {
+                    // الحالة أ: إرسال لكل سائقين الشركة المحددة عبر توبك مخصص برقم الشركة
+                    // مثال: company_drivers_5
+                    $message = CloudMessage::withTarget('topic', 'company_drivers_' . $companyId);
+                } else {
+                    // الحالة ب: إرسال لسائق محدد عبر الـ Token الخاص بجهازه
+                    $driverToken = $record->driver->fcm_token ?? null;
+                    if (!$driverToken) return; // نلغي الإرسال إذا ما عنده توكن
+                    
+                    $message = CloudMessage::withTarget('token', $driverToken);
+                }
+            } else {
+                // الحالة ج: إرسال لكافة المسافرين عبر التوبك العام
+                $message = CloudMessage::withTarget('topic', 'passenger');
+            }
 
-// 🌟هي الداتا اللي رح يستقبلها الفلتر عشان يرسم التصميم اللي بدك ياه!
-// هون مررت البيانات كمتغيرات للفلتر (مصفوفة)
+            // إرسال البيانات الموحدة للفلتر ليرسمها بالصفحة
+            $message = $message
+                ->withNotification(Notification::create($record->title, $record->content)
+                    ->withImageUrl($fullLogoUrl))
+                ->withData([
+                    'notification_id' => (string) $record->id,
+                    'name'            => $name,         
+                    'logo_url'        => $fullLogoUrl,  
+                    'title'           => $record->title,
+                    'content'         => $record->content,
+                    'created_at'      => $record->created_at->format('Y-m-d H:i A'),
+                    'click_action'    => 'FLUTTER_NOTIFICATION_CLICK',
+                ]);
 
-            ->withData([
-                'notification_id' => (string) $record->id,
-                'name'            => $name,         // اسم الشركة من حقل name
-                'logo_url'        => $fullLogoUrl,  // رابط اللوغو من حقل logo_url
-                'title'           => $record->title,
-                'content'         => $record->content,
-                'created_at'      => $record->created_at->format('Y-m-d H:i A'),
-// لما المستخدم يضغط على الإشعار وهو بشريط الإشعارات، لا تفتح المتصفح ولا تفتح تطبيق ثاني، افتح تطبيق الفلتر تبعي
-                'click_action'    => 'FLUTTER_NOTIFICATION_CLICK',
-            ]);
-
-        $messaging->send($message);
-        
-    } catch (\Exception $e) {
-        \Log::error("Firebase Error: " . $e->getMessage());
+            $messaging->send($message);
+            
+        } catch (\Exception $e) {
+            \Log::error("Firebase Error: " . $e->getMessage());
+        }
     }
-
-}
 
 
 

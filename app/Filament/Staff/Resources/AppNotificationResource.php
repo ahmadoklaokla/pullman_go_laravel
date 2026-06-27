@@ -7,6 +7,7 @@ use App\Filament\Staff\Resources\AppNotificationResource\RelationManagers;
 use App\Models\AppNotification;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -32,35 +33,98 @@ class AppNotificationResource extends Resource
         return $form
             ->schema([
 
-        Forms\Components\Hidden::make('company_id')
-            ->default(auth()->user()->company_id),
+                Forms\Components\Hidden::make('company_id')
+                    ->default(auth()->user()->company_id),
 
 
 
-            Forms\Components\Section::make('تفاصيل الإشعار المرسل للتطبيق')
-                    ->description('سيتم إرسال هذا الإشعار لجميع المسافرين، وسيظهر مع لوغو واسم شركتك تلقائياً.')
+ // هاد الحقل المخفيالحقيقي الي بيوخذ شو اختار الموظف من الحقل الوهمي تحت وببعثو للداتا بيز
+
+                Forms\Components\Hidden::make('send_to_all_drivers')
+                    ->dehydrateStateUsing(function (Forms\Get $get) {
+                        // 1. إذا كان الإرسال للمسافرين -> دايماً يعطي 1 (true)
+                        if ($get('target_role') === 'passenger') {
+                            return true;
+                        }
+                        
+                        // 2. إذا كان للسائقين -> يأخذ القيمة من الراديو (إذا محدد يعطي 0 وإذا الكل يعطي 1)
+                        return $get('driver_selection_type') ?? true;
+                    }),
+
+
+
+                Forms\Components\Section::make('تفاصيل الإشعار المرسل للتطبيق')
+                    ->description('حدد الفئة المستهدفة واكتب تفاصيل الرسالة بعناية.')
                     ->schema([
 
+
+
+                        Forms\Components\Radio::make('target_role')
+                            ->label('إرسال الإشعار إلى')
+                            ->options([
+                                'passenger' => 'المسافرين',
+                                'driver'    => 'السائقين ',
+                            ])
+                            ->default('passenger')
+                            ->reactive() // لجعل الواجهة تتفاعل فوراً عند التغيير
+                            ->required(),
+
+
+
+
+                        // بتظهر لما تكون الفئة المستهدفة هيا السائقين
+                        Forms\Components\Group::make([
+//الحقل الوهمي مشان قبل ما ينبعث على الداتا بيز بروح للحقل المخفي send_to_all_drivers فوق وهداك الي ببعث للداتا بيز
+
+                            Forms\Components\Radio::make('driver_selection_type')
+                                ->label('نوع الإرسال للسائقين')
+                                ->options([
+                                    true  => 'إرسال إلى كافة سائقي الشركة',
+                                    false => 'إرسال إلى سائق محدد فقط',
+                                ])
+                                ->default(true)
+                                ->reactive()
+
+// هاد السطر مشان يقرا من الداتا بيز شو اخترت مين هوا السائق الي اخترتو مشان يبين بالجدول
+                                ->afterStateHydrated(fn ($set, $record) => $set('driver_selection_type', $record ? (bool) $record->send_to_all_drivers : true))
+                                ->dehydrated(false), // حقل وهمي للواجهة فقط
+
+
+
+
+                            Forms\Components\Select::make('driver_id')
+                                ->label('اختر السائق المستهدف')
+                                ->relationship(
+                                    name: 'driver',
+                                    titleAttribute: 'name',
+                                    modifyQueryUsing: fn ($query) => $query
+                                        ->where('company_id', auth()->user()->company_id)
+                                        ->where('role', 'driver')
+                                )
+                                ->searchable()
+                                ->preload()
+                                ->placeholder('ابحث واختر السائق...')
+                                ->required(fn (Forms\Get $get) => $get('driver_selection_type') == false)
+                                ->visible(fn (Forms\Get $get) => $get('driver_selection_type') == false),
+                        ])
+                        ->visible(fn (Forms\Get $get) => $get('target_role') === 'driver'), // يظهر فقط للسائقين
+
+
+
+                    
                         Forms\Components\TextInput::make('title')
                             ->label('عنوان الرسالة')
                             ->required()
-                            ->maxLength(255)
-                            ->placeholder('مثال: عرض خاص، أو تنبيه هام..'),
-                        
+                            ->maxLength(255),
+
 
                         Forms\Components\Textarea::make('content')
                             ->label('محتوى الرسالة')
                             ->required()
-                            ->rows(5)
-                            ->placeholder('اكتب تفاصيل الرسالة هنا...'),
+                            ->rows(5),
 
-
-                        // حقل مخفي نثبت فيه إنو الإشعار رايح للمسافرين
-                        Forms\Components\Hidden::make('target_role')
-                            ->default('passenger'),
                     ]),
             ]);
-
     }
 
 
@@ -112,10 +176,25 @@ class AppNotificationResource extends Resource
                 Tables\Columns\TextColumn::make('target_role')
                     ->label('إرسال إلى')
                     ->alignCenter()
-                    ->formatStateUsing(fn (string $state): string => $state === 'passenger' ? 'كافة المسافرين' : $state)
-                    ->badge() // بخليها تظهر جوا كبسولة أو Badge
-                    ->color('info') // لون أزرق 
-                    ->icon('heroicon-m-users'),
+
+                    ->formatStateUsing(function (string $state, $record): string {
+                        if ($state === 'driver') {
+                            return $record->send_to_all_drivers 
+                                ? 'كافة سائقي الشركة' 
+                                : 'السائق: ' . ($record->driver->name ?? 'غير محدد');
+                        }
+                        return 'كافة المسافرين';
+                    })
+                    ->badge() 
+                    ->color(fn (string $state): string => $state === 'driver' ? 'warning' : 'info')
+
+                    ->icon(fn ($record): string => 
+                        $record->target_role === 'driver' && !$record->send_to_all_drivers 
+                            ? 'heroicon-m-user' 
+                            : 'heroicon-m-users'
+                    ),
+
+
 
 
                 Tables\Columns\TextColumn::make('created_at')

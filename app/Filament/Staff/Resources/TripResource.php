@@ -439,19 +439,20 @@ class TripResource extends Resource
 
 
     // مشان يعرضلي فقط الرحلات التابعة لهاد المسار الي تابع لهي الشركة 
-public static function getEloquentQuery(): Builder
-{
-    return parent::getEloquentQuery()
-        ->whereHas('route', function ($query) {
-            $query->where('company_id', auth()->user()->company_id);
-        })
-        // مشان ما يطلعلي سجلات كثير من الرحلات عند الموظف لانو فقط بال db 
-        ->whereIn('id', function ($query) {
-            $query->selectRaw('MIN(id)')
-                ->from('trips')
-                ->groupBy('route_id', 'bus_id', 'scheduled_time');
-        });
-}
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->whereHas('route', function ($query) {
+                $query->where('company_id', auth()->user()->company_id);
+            })
+
+            // هون بجمعلي الرحلات بسجل واحد عند اضافة رحلة جديدة ولكن بالداتابيز لكل رحلة الها سجل
+            ->whereIn('id', function ($query) {
+                $query->selectRaw('MIN(id)')
+                    ->from('trips')
+                    ->groupBy('route_id', 'bus_id', 'scheduled_time');
+            });
+    }
 
 
 
@@ -679,8 +680,18 @@ public static function getEloquentQuery(): Builder
 
                 Tables\Actions\EditAction::make(),
 
+                    
+
                 // مشان لما احذف سطر واحد من جدول الرحلات يحذفلي كلشي رحلات مكررة لهاد السجل (السطر)
                 Tables\Actions\DeleteAction::make()
+                    ->modalHeading('هل أنت متأكد من أنك تريد حذف هذا السجل؟')
+                        ->modalDescription(new \Illuminate\Support\HtmlString(
+                            '<div style="background-color: rgba(220, 38, 38, 0.1); border-right: 4px solid #dc2626; color: #ef4444; padding: 10px 14px; border-radius: 6px; margin-top: 12px; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; text-align: right;" dir="rtl">
+                                <span>⚠️</span>
+                                <strong>علماً أنه سوف يتم حذف جميع الرحلات لهذا السجل المحدد.</strong>
+                            </div>'
+                        ))
+
                     ->action(function ($record) {
                         // رح نحذف كل الرحلات اللي إلها نفس المسار والباص وموعد الانطلاق تبع السطر اللي ضغطت عليه
                         \App\Models\Trip::where('route_id', $record->route_id)

@@ -44,6 +44,8 @@ class User extends Authenticatable implements FilamentUser, HasTenants, HasAvata
 
         // هي للمستخدم ع التطبيق
         'passenger_image',
+
+        'fcm_token',
     ];
 
     protected $hidden = [

@@ -56,7 +56,7 @@ class DriverAuthController extends Controller
         
         return response()->json([
             'status' => 'success',
-            'message' => 'تم تسجيل الدخول بنجاح يا بطل! 🚀',
+            'message' => 'تم تسجيل الدخول بنجاح ! 🚀',
             'token' => $token,
             'user' => [
 
@@ -65,6 +65,8 @@ class DriverAuthController extends Controller
                 'email' => $user->email,
                 'phone' => $user->phone,
                 'role' => $user->role,
+
+                'company_id' => $user->company_id,
             ]
         ], 200);
     }

@@ -271,6 +271,9 @@ class BookingResource extends Resource
 
 
                                 ->where('is_active', true) // 🟢  شرط لجلب الرحلات النشطة فقط
+
+                                ->orderBy('trip_date', 'asc') //  رتبلي إياهم حسب التاريخ أولا)
+                                ->orderBy('scheduled_time', 'asc') //  وجوات نفس اليوم، رتب الساعات تصاعدي)
                                 ->get()
                                 ->filter(function ($record) {
                                         if (!$record->trip_date || empty($record->days_of_week)) return true;
@@ -286,16 +289,22 @@ class BookingResource extends Resource
                                 })
 
 
-
-                                ->mapWithKeys(function ($record) {
-                                    // 1. تنسيق الوقت
-                                        $time = \Carbon\Carbon::parse($record->scheduled_time)->format('g:i A');
-                                        // 2. استخراج التاريخ واسم اليوم (الإضافة الجديدة)
-                                        $date = $record->trip_date ? \Carbon\Carbon::parse($record->trip_date)->format('Y-m-d') : '';
-                                        $dayName = $record->trip_date ? \Carbon\Carbon::parse($record->trip_date)->translatedFormat('l') : '';
-                                    return [$record->id => "رحلة رقم {$record->id} | {$dayName} | موعد الإنطلاق: {$time} | بتاريخ: {$date}"];
-                                });
+                       // هون مشان يعطيني تفصيل واضح لكل يوم هوا ومواعيد الرحلات الي فيه
+                        ->groupBy(function ($record) {
+                                    $dayName = $record->trip_date ? \Carbon\Carbon::parse($record->trip_date)->translatedFormat('l') : 'بدون تاريخ';
+                                    $date = $record->trip_date ? \Carbon\Carbon::parse($record->trip_date)->format('Y-m-d') : '';
+                                    return "📅 يوم {$dayName} ─── ({$date})";
+                                })
+                                ->map(function ($dayTrips) {
+                                    return $dayTrips->mapWithKeys(function ($record) {
+                                        $carbonTime = \Carbon\Carbon::parse($record->scheduled_time);
+                                        $timeStr = $carbonTime->format('g:i'); 
+                                        $meridiem = $carbonTime->format('A') === 'AM' ? 'صباحاً' : 'مساءً';
+                                        return [$record->id => "رحلة رقم {$record->id} ← موعد الإنطلاق: {$timeStr} {$meridiem}"];
+                                    })->toArray();
+                                })->toArray(); // 🟢 هنا تنتهي الدالة وتُرجع المصفوفة مجمعة ومرتبة للموظف
                         })
+
                         ->live() 
 
                         ->afterStateUpdated(function ($state, Forms\Set $set) {
@@ -629,11 +638,14 @@ public static function table(Table $table): Table
                         
                         if ($imagePath) {
                             // عرض الصورة برابطها المباشر من مجلد الـ public الرئيسي وبشكل دائري 100%
-                            return '<img src="' . url($imagePath) . '" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto;">';
+                            return '<img src="' . url($imagePath) . '" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto;">';
                         }
                         
-                        // شكل دائري رمادي بديل كـ Placeholder لو المستخدم مو حاطط صورة
-                        return '<div style="width: 40px; height: 40px; border-radius: 50%; background-color: #e5e7eb; display: flex; align-items: center; justify-content: center; margin: 0 auto;"><svg style="width:20px; height:20px; color:#9ca3af;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg></div>';
+
+                    // اذا مو حاط صورة بيعطيني صورة التطبيق او اللوغو
+                    $defaultAvatar = asset('images/logo.png'); 
+                            
+                    return '<img src="' . $defaultAvatar . '" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto;">';
                     }),
 
 
@@ -836,21 +848,38 @@ public static function table(Table $table): Table
                 ->live()
                 ->options(function (Forms\Get $get) {
                     $routeId = $get('route_id');
-                    $query = \App\Models\Trip::where('company_id', auth()->user()->company_id);
+
+                    $query = \App\Models\Trip::where('company_id', auth()->user()->company_id)
+
+                    ->orderBy('trip_date', 'asc')
+                    ->orderBy('scheduled_time', 'asc');
 
                     // إذا الموظف اختار مسار، جيب بس رحلات هاد المسار
                     if ($routeId) {
                         $query->where('route_id', $routeId);
                     }
 
-                    return $query->get()->mapWithKeys(function ($trip) {
-                        // تنسيق الوقت (صباحاً/مساءً) مع رقم الرحلة والتاريخ
-                        $time = $trip->scheduled_time ? \Carbon\Carbon::parse($trip->scheduled_time)->format('h:i A') : 'غير محدد';
+
+            // ترتيب عرض الرحلات 
+                    return $query->get()->groupBy(function ($trip) {
+                        $dayName = $trip->trip_date ? \Carbon\Carbon::parse($trip->trip_date)->translatedFormat('l') : 'بدون تاريخ';
                         $date = $trip->trip_date ? \Carbon\Carbon::parse($trip->trip_date)->format('Y-m-d') : '';
-                        $dayName = $trip->trip_date ? \Carbon\Carbon::parse($trip->trip_date)->translatedFormat('l') : '';  // بجيب اسم اليوم حرف lبجيب اسم اليوم كامل 
-                        
-                        return [$trip->id => "رحلة رقم {$trip->id} | {$dayName} | الانطلاق: {$time} | بتاريخ: {$date}"];
-                    });
+                        return "📅 يوم {$dayName} ─── ({$date})";
+                    })->map(function ($dayTrips) {
+                        // تنسيق السطور الداخلية لكل يوم
+                        return $dayTrips->mapWithKeys(function ($trip) {
+                            if ($trip->scheduled_time) {
+                                $carbonTime = \Carbon\Carbon::parse($trip->scheduled_time);
+                                $timeStr = $carbonTime->format('g:i'); 
+                                $meridiem = $carbonTime->format('A') === 'AM' ? 'صباحاً' : 'مساءً';
+                                $time = "{$timeStr} {$meridiem}";
+                            } else {
+                                $time = 'غير محدد';
+                            }
+
+                            return [$trip->id => "رحلة رقم {$trip->id} ← الانطلاق: {$time}"];
+                        })->toArray();
+                    })->toArray();
                 })
                 
                 ->searchable()

@@ -17,7 +17,13 @@ class AppNotification extends Model
         'title',
         'content',
         'target_role',
+
+
+        'driver_id',           // ايدي السائق اذا بدي احدد الاشعار لسائق معين وليس لكافة السائقين
+        'send_to_all_drivers', // حقل جديد (بولين 0 أو 1) عشان نعرف لو الإرسال لكل سائقين الشركة
+
     ];
+
 
 
 
@@ -35,5 +41,13 @@ class AppNotification extends Model
     public function sender(): BelongsTo
     {
         return $this->belongsTo(User::class, 'sender_id');
+    }
+
+
+
+
+    public function driver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'driver_id');
     }
 }
